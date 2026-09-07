@@ -12,7 +12,7 @@ import (
 func main() {
 
 	if len(os.Args) < 3 {
-		fmt.Println("Usage: kube-review review <file>")
+		fmt.Println("Usage: kube-review review <file-or-directory>")
 		os.Exit(1)
 	}
 
@@ -23,17 +23,52 @@ func main() {
 		os.Exit(1)
 	}
 
-	deployment, err := parser.LoadDeployment(os.Args[2])
+	path := os.Args[2]
+
+	if parser.IsDirectory(path) {
+
+		files, err := parser.ListYAMLFiles(path)
+
+		if err != nil {
+			panic(err)
+		}
+
+		for _, file := range files {
+
+			deployment, err := parser.LoadDeployment(file)
+
+			if err != nil {
+				fmt.Printf("Failed to load %s: %v\n", file, err)
+				continue
+			}
+
+			fmt.Println()
+			fmt.Println("File:", file)
+			fmt.Println("Deployment:", deployment.Name)
+
+			findings := rules.RunAll(deployment)
+
+			if len(findings) == 0 {
+				fmt.Println("No findings")
+				continue
+			}
+
+			output.PrintFindings(findings)
+		}
+
+		return
+	}
+
+	deployment, err := parser.LoadDeployment(path)
 
 	if err != nil {
 		panic(err)
 	}
 
 	fmt.Println("Deployment:", deployment.Name)
+	fmt.Println()
 
 	findings := rules.RunAll(deployment)
-
-	fmt.Println()
 
 	if len(findings) == 0 {
 		fmt.Println("No findings")

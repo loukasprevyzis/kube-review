@@ -11,6 +11,9 @@ func RunAll(d *appsv1.Deployment) []Finding {
 	findings = append(findings, CheckResourceRequests(d)...)
 	findings = append(findings, CheckRunAsNonRoot(d)...)
 	findings = append(findings, CheckReadinessProbe(d)...)
+	findings = append(findings, CheckLivenessProbe(d)...)
+	findings = append(findings, CheckPrivilegedContainer(d)...)
+	findings = append(findings, CheckAllowPrivilegeEscalation(d)...)
 
 	return findings
 }
