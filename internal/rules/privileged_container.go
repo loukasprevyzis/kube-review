@@ -3,14 +3,14 @@ package rules
 import (
 	"fmt"
 
-	appsv1 "k8s.io/api/apps/v1"
+	"github.com/loukasprevyzis/kube-review/internal/workload"
 )
 
-func CheckPrivilegedContainer(d *appsv1.Deployment) []Finding {
+func CheckPrivilegedContainer(w *workload.Workload) []Finding {
 
 	var findings []Finding
 
-	for _, c := range d.Spec.Template.Spec.Containers {
+	for _, c := range w.AllContainers() {
 
 		if c.SecurityContext != nil &&
 			c.SecurityContext.Privileged != nil &&

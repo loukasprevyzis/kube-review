@@ -4,14 +4,14 @@ import (
 	"fmt"
 	"strings"
 
-	appsv1 "k8s.io/api/apps/v1"
+	"github.com/loukasprevyzis/kube-review/internal/workload"
 )
 
-func CheckLatestTag(d *appsv1.Deployment) []Finding {
+func CheckLatestTag(w *workload.Workload) []Finding {
 
 	var findings []Finding
 
-	for _, c := range d.Spec.Template.Spec.Containers {
+	for _, c := range w.AllContainers() {
 
 		if strings.HasSuffix(c.Image, ":latest") {
 			findings = append(findings, Finding{

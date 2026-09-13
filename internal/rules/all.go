@@ -1,19 +1,19 @@
 package rules
 
-import appsv1 "k8s.io/api/apps/v1"
+import "github.com/loukasprevyzis/kube-review/internal/workload"
 
-func RunAll(d *appsv1.Deployment) []Finding {
+func RunAll(w *workload.Workload) []Finding {
 
 	var findings []Finding
 
-	findings = append(findings, CheckLatestTag(d)...)
-	findings = append(findings, CheckResourceLimits(d)...)
-	findings = append(findings, CheckResourceRequests(d)...)
-	findings = append(findings, CheckRunAsNonRoot(d)...)
-	findings = append(findings, CheckReadinessProbe(d)...)
-	findings = append(findings, CheckLivenessProbe(d)...)
-	findings = append(findings, CheckPrivilegedContainer(d)...)
-	findings = append(findings, CheckAllowPrivilegeEscalation(d)...)
+	findings = append(findings, CheckLatestTag(w)...)
+	findings = append(findings, CheckResourceLimits(w)...)
+	findings = append(findings, CheckResourceRequests(w)...)
+	findings = append(findings, CheckRunAsNonRoot(w)...)
+	findings = append(findings, CheckReadinessProbe(w)...)
+	findings = append(findings, CheckLivenessProbe(w)...)
+	findings = append(findings, CheckPrivilegedContainer(w)...)
+	findings = append(findings, CheckAllowPrivilegeEscalation(w)...)
 
 	return findings
 }

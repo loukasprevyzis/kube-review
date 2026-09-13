@@ -3,14 +3,14 @@ package rules
 import (
 	"fmt"
 
-	appsv1 "k8s.io/api/apps/v1"
+	"github.com/loukasprevyzis/kube-review/internal/workload"
 )
 
-func CheckLivenessProbe(d *appsv1.Deployment) []Finding {
+func CheckLivenessProbe(w *workload.Workload) []Finding {
 
 	var findings []Finding
 
-	for _, c := range d.Spec.Template.Spec.Containers {
+	for _, c := range w.Spec.Containers {
 
 		if c.LivenessProbe == nil {
 

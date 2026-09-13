@@ -1,8 +1,8 @@
 package rules
 
-import appsv1 "k8s.io/api/apps/v1"
+import "github.com/loukasprevyzis/kube-review/internal/workload"
 
 type Rule interface {
 	Name() string
-	Check(*appsv1.Deployment) []Finding
+	Check(*workload.Workload) []Finding
 }
