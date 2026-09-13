@@ -291,4 +291,4 @@ kube-review/
 
 ## Author
 
-Built by Loukas Prevyzis as a Go learning project focused on Platform Engineering, Kubernetes, and DevSecOps.
+Built by Loukas Prevyzis as a Platform Engineering project focused on Platform Engineering, Kubernetes, and DevSecOps.
