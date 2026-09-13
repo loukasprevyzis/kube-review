@@ -1,4 +1,4 @@
-# Code Guide (for Go beginners)
+# Code Guide
 
 This walks through every `.go` file in this repo, in the order you'd want to
 read them to understand the codebase, not alphabetically. If you're new to
