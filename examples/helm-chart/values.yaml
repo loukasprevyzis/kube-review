@@ -1,0 +1,5 @@
+image:
+  repository: ghcr.io/acme/payments-api
+  tag: latest
+
+replicas: 2

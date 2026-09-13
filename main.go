@@ -8,12 +8,13 @@ import (
 	"github.com/loukasprevyzis/kube-review/internal/output"
 	"github.com/loukasprevyzis/kube-review/internal/parser"
 	"github.com/loukasprevyzis/kube-review/internal/rules"
+	"github.com/loukasprevyzis/kube-review/internal/workload"
 )
 
 const defaultConfigFile = ".kube-review.yml"
 
 func usage() {
-	fmt.Println("Usage: kube-review review [--fail-on HIGH|MEDIUM|LOW|NONE] [--output text|json|sarif] [--config path] <file-or-directory>")
+	fmt.Println("Usage: kube-review review [--fail-on HIGH|MEDIUM|LOW|NONE] [--output text|json|sarif] [--config path] [--values file]... <file-or-directory-or-helm-chart>")
 }
 
 func main() {
@@ -33,6 +34,7 @@ func main() {
 	failOn := rules.High
 	outputFormat := "text"
 	configPath := ""
+	var valuesFiles []string
 	var positional []string
 
 	args := os.Args[2:]
@@ -73,6 +75,17 @@ func main() {
 		case strings.HasPrefix(arg, "--config="):
 			configPath = strings.TrimPrefix(arg, "--config=")
 
+		case arg == "--values":
+			i++
+			if i >= len(args) {
+				fmt.Fprintln(os.Stderr, "Error: --values requires a value")
+				os.Exit(1)
+			}
+			valuesFiles = append(valuesFiles, args[i])
+
+		case strings.HasPrefix(arg, "--values="):
+			valuesFiles = append(valuesFiles, strings.TrimPrefix(arg, "--values="))
+
 		default:
 			positional = append(positional, arg)
 		}
@@ -96,6 +109,12 @@ func main() {
 	}
 
 	path := positional[0]
+	isChart := parser.IsHelmChart(path)
+
+	if len(valuesFiles) > 0 && !isChart {
+		fmt.Fprintf(os.Stderr, "Error: --values only applies when <path> is a Helm chart (%s has no Chart.yaml)\n", path)
+		os.Exit(1)
+	}
 
 	if configPath == "" {
 		if _, err := os.Stat(defaultConfigFile); err == nil {
@@ -113,50 +132,88 @@ func main() {
 		policy = p
 	}
 
-	var files []string
+	var results []output.Result
+	hadFailure := false
+	shouldFail := false
 
-	if parser.IsDirectory(path) {
+	if isChart {
 
-		found, err := parser.ListYAMLFiles(path)
-
+		rendered, err := parser.LoadHelmChart(path, valuesFiles)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "Error:", err)
 			os.Exit(1)
 		}
 
-		files = found
-
-	} else {
-		files = []string{path}
-	}
-
-	var results []output.Result
-	hadFailure := false
-	shouldFail := false
-
-	for _, file := range files {
-
-		workloads, err := parser.LoadWorkloads(file)
-
-		if err != nil {
-			results = append(results, output.Result{File: file, Error: err.Error()})
-			hadFailure = true
-			continue
+		for _, rw := range rendered {
+			result, fail := reviewWorkload(rw.Source, rw.Workload, policy, threshold)
+			results = append(results, result)
+			if fail {
+				shouldFail = true
+			}
 		}
 
-		for _, w := range workloads {
+	} else {
 
-			findings := rules.RunAll(w, policy)
+		var files []string
+		var chartDirs []string
 
-			results = append(results, output.Result{
-				File:     file,
-				Kind:     w.Kind,
-				Name:     w.Name,
-				Findings: findings,
-			})
+		if parser.IsDirectory(path) {
 
-			for _, f := range findings {
-				if rules.MeetsThreshold(f.Severity, threshold) {
+			found, err := parser.ListYAMLFiles(path)
+
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "Error:", err)
+				os.Exit(1)
+			}
+
+			files = found
+
+			charts, err := parser.ListHelmCharts(path)
+
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "Error:", err)
+				os.Exit(1)
+			}
+
+			chartDirs = charts
+
+		} else {
+			files = []string{path}
+		}
+
+		for _, file := range files {
+
+			workloads, err := parser.LoadWorkloads(file)
+
+			if err != nil {
+				results = append(results, output.Result{File: file, Error: err.Error()})
+				hadFailure = true
+				continue
+			}
+
+			for _, w := range workloads {
+				result, fail := reviewWorkload(file, w, policy, threshold)
+				results = append(results, result)
+				if fail {
+					shouldFail = true
+				}
+			}
+		}
+
+		for _, chartDir := range chartDirs {
+
+			rendered, err := parser.LoadHelmChart(chartDir, nil)
+
+			if err != nil {
+				results = append(results, output.Result{File: chartDir, Error: err.Error()})
+				hadFailure = true
+				continue
+			}
+
+			for _, rw := range rendered {
+				result, fail := reviewWorkload(rw.Source, rw.Workload, policy, threshold)
+				results = append(results, result)
+				if fail {
 					shouldFail = true
 				}
 			}
@@ -181,6 +238,27 @@ func main() {
 	if hadFailure || shouldFail {
 		os.Exit(1)
 	}
+}
+
+// reviewWorkload runs every rule against w and reports whether any finding
+// met the fail-on threshold.
+func reviewWorkload(file string, w *workload.Workload, policy rules.Policy, threshold string) (output.Result, bool) {
+
+	findings := rules.RunAll(w, policy)
+
+	shouldFail := false
+	for _, f := range findings {
+		if rules.MeetsThreshold(f.Severity, threshold) {
+			shouldFail = true
+		}
+	}
+
+	return output.Result{
+		File:     file,
+		Kind:     w.Kind,
+		Name:     w.Name,
+		Findings: findings,
+	}, shouldFail
 }
 
 func printText(results []output.Result) {

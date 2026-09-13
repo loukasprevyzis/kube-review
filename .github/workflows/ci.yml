@@ -16,6 +16,8 @@ jobs:
           go-version: "1.26"
           cache: true
 
+      - uses: azure/setup-helm@v5
+
       - name: go vet
         run: go vet ./...
 
@@ -35,3 +37,44 @@ jobs:
         with:
           name: kube-review-sarif
           path: kube-review.sarif
+
+  # Dogfoods action.yml itself against known-good and known-bad fixtures, so
+  # a drift between the CLI and the composite action fails CI instead of
+  # surfacing only when a consumer's workflow breaks.
+  action-selftest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: expect findings on the vulnerable example (should fail)
+        id: vulnerable
+        continue-on-error: true
+        uses: ./
+        with:
+          path: examples/deployment.yaml
+
+      - name: assert the vulnerable example failed
+        if: steps.vulnerable.outcome != 'failure'
+        run: |
+          echo "expected the action to fail on examples/deployment.yaml, but it succeeded"
+          exit 1
+        shell: bash
+
+      - name: expect no findings on the compliant example (should pass)
+        uses: ./
+        with:
+          path: examples/good-deployment.yaml
+
+      - name: expect the Helm chart to render and pass with --fail-on NONE
+        uses: ./
+        with:
+          path: examples/helm-chart
+          fail-on: NONE
+          output: sarif
+
+      - name: expect a values override to change the rendered image
+        uses: ./
+        with:
+          path: examples/helm-chart
+          fail-on: NONE
+          values-files: examples/helm-chart/values-prod.yaml

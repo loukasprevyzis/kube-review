@@ -31,6 +31,7 @@ Static Kubernetes manifest review tool written in Go.
 - Recursively scans subdirectories
 - Supports `.yaml` and `.yml` files
 - Supports multi-document YAML files (`---`-separated)
+- Renders and reviews Helm charts (requires `helm` on `PATH`)
 
 ### Workload Support
 
@@ -95,7 +96,21 @@ kube-review review examples/deployment.yaml
 kube-review review examples
 ```
 
-The tool will recursively discover Kubernetes manifests and review each file.
+The tool will recursively discover Kubernetes manifests and review each file. A Helm chart found anywhere in the tree (any directory with a `Chart.yaml`) is rendered with `helm template` instead of being scanned as raw YAML — findings are attributed to the template file they came from.
+
+### Review a Helm chart
+
+```bash
+kube-review review examples/helm-chart
+```
+
+Pass one or more values files, applied in order, the same way `helm template --values` would:
+
+```bash
+kube-review review examples/helm-chart --values examples/helm-chart/values-prod.yaml
+```
+
+Requires `helm` on `PATH`. `--values` is rejected if `<path>` isn't a chart (no `Chart.yaml`).
 
 ### Flags
 
@@ -104,6 +119,7 @@ The tool will recursively discover Kubernetes manifests and review each file.
 | `--fail-on` | `HIGH`, `MEDIUM`, `LOW`, `NONE` | `HIGH` | Minimum severity that causes a non-zero exit code. `NONE` never fails on findings (a file that fails to parse still exits non-zero). |
 | `--output` | `text`, `json`, `sarif` | `text` | Output format. `json` is for CI/tooling integration; `sarif` produces a SARIF 2.1.0 report for GitHub code scanning and similar dashboards. |
 | `--config` | path to a policy file | `.kube-review.yml` if present in the working directory | See [Policy Configuration](#policy-configuration). |
+| `--values` | path to a Helm values file (repeatable) | none | Only valid when `<path>` is a Helm chart. |
 
 Flags may appear before or after the path:
 
@@ -135,6 +151,37 @@ On repos with GitHub Advanced Security / code scanning enabled, upload findings 
 ```
 
 Use `--fail-on NONE` when generating the SARIF report so the step doesn't exit non-zero before the upload step runs — let code scanning surface the findings instead of failing the build here.
+
+---
+
+## GitHub Action
+
+Use `kube-review` as a step without building it yourself:
+
+```yaml
+- uses: loukasprevyzis/kube-review@main
+  with:
+    path: manifests/
+    fail-on: HIGH        # optional, default HIGH
+    output: text         # optional, default text (text, json, or sarif)
+    config: ""           # optional, path to a .kube-review.yml
+    values-files: ""     # optional, newline-separated Helm values files
+```
+
+The action builds `kube-review` from source at the referenced ref and installs Helm, so chart review works out of the box. Combined with SARIF output and code scanning:
+
+```yaml
+- uses: loukasprevyzis/kube-review@main
+  id: review
+  with:
+    path: manifests/
+    fail-on: NONE
+    output: sarif
+
+- uses: github/codeql-action/upload-sarif@v3
+  with:
+    sarif_file: ${{ steps.review.outputs.sarif-file }}
+```
 
 ---
 
@@ -237,8 +284,8 @@ kube-review/
 - [x] CI pipeline (GitHub Actions)
 - [x] Configurable rule policies (enable/disable individual rules, per-rule severity overrides)
 - [x] SARIF output
-- [ ] Helm chart support
-- [ ] GitHub Action integration (composite action wrapping the binary)
+- [x] Helm chart support
+- [x] GitHub Action integration (composite action wrapping the binary)
 
 ---
 

@@ -28,7 +28,32 @@ func LoadWorkloads(path string) ([]*workload.Workload, error) {
 		return nil, err
 	}
 
+	docs, err := splitYAMLDocuments(data)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
+
 	var workloads []*workload.Workload
+
+	for _, doc := range docs {
+		w, err := parseWorkload(doc)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", path, err)
+		}
+		if w == nil {
+			continue
+		}
+
+		workloads = append(workloads, w)
+	}
+
+	return workloads, nil
+}
+
+// splitYAMLDocuments splits a "---"-separated YAML stream into its
+// individual documents, dropping empty ones.
+func splitYAMLDocuments(data []byte) ([][]byte, error) {
+	var docs [][]byte
 
 	reader := k8syaml.NewYAMLReader(bufio.NewReader(bytes.NewReader(data)))
 
@@ -45,18 +70,10 @@ func LoadWorkloads(path string) ([]*workload.Workload, error) {
 			continue
 		}
 
-		w, err := parseWorkload(doc)
-		if err != nil {
-			return nil, fmt.Errorf("%s: %w", path, err)
-		}
-		if w == nil {
-			continue
-		}
-
-		workloads = append(workloads, w)
+		docs = append(docs, doc)
 	}
 
-	return workloads, nil
+	return docs, nil
 }
 
 func parseWorkload(doc []byte) (*workload.Workload, error) {
