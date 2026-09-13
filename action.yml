@@ -1,0 +1,84 @@
+name: "kube-review"
+description: "Static security, reliability, and cost review for Kubernetes manifests and Helm charts"
+author: "loukasprevyzis"
+
+branding:
+  icon: "shield"
+  color: "blue"
+
+inputs:
+  path:
+    description: "File, directory, or Helm chart to review"
+    required: true
+  fail-on:
+    description: "Minimum severity that fails the build: HIGH, MEDIUM, LOW, or NONE"
+    required: false
+    default: "HIGH"
+  output:
+    description: "Output format: text, json, or sarif"
+    required: false
+    default: "text"
+  config:
+    description: "Path to a .kube-review.yml policy file"
+    required: false
+    default: ""
+  values-files:
+    description: "Newline-separated list of Helm values files (only used when path is a chart)"
+    required: false
+    default: ""
+
+outputs:
+  sarif-file:
+    description: 'Path to the generated SARIF report (only set when output is "sarif")'
+    value: ${{ steps.review.outputs.sarif-file }}
+
+runs:
+  using: "composite"
+  steps:
+    - uses: actions/setup-go@v7
+      with:
+        go-version: "1.26"
+        cache: false
+
+    - uses: azure/setup-helm@v5
+
+    - name: Build kube-review
+      shell: bash
+      run: go build -o "${{ github.action_path }}/kube-review" "${{ github.action_path }}"
+
+    - name: Run kube-review
+      id: review
+      shell: bash
+      env:
+        KR_BIN: ${{ github.action_path }}/kube-review
+        KR_PATH: ${{ inputs.path }}
+        KR_FAIL_ON: ${{ inputs.fail-on }}
+        KR_OUTPUT: ${{ inputs.output }}
+        KR_CONFIG: ${{ inputs.config }}
+        KR_VALUES_FILES: ${{ inputs.values-files }}
+      run: |
+        # Inputs are passed via env vars, not interpolated into this script
+        # directly, since a workflow can source an input's value from
+        # untrusted content (a PR title, an issue body, ...): interpolating
+        # ${{ inputs.x }} straight into `run:` would let that content break
+        # out of its argument and run arbitrary shell here.
+        args=(review "$KR_PATH" --fail-on "$KR_FAIL_ON" --output "$KR_OUTPUT")
+
+        if [ -n "$KR_CONFIG" ]; then
+          args+=(--config "$KR_CONFIG")
+        fi
+
+        while IFS= read -r file; do
+          [ -n "$file" ] && args+=(--values "$file")
+        done <<< "$KR_VALUES_FILES"
+
+        if [ "$KR_OUTPUT" = "sarif" ]; then
+          "$KR_BIN" "${args[@]}" > kube-review.sarif
+          status=$?
+          echo "sarif-file=kube-review.sarif" >> "$GITHUB_OUTPUT"
+        else
+          "$KR_BIN" "${args[@]}"
+          status=$?
+        fi
+
+        exit "$status"
