@@ -3,16 +3,21 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/loukasprevyzis/kube-review/internal/output"
 	"github.com/loukasprevyzis/kube-review/internal/parser"
 	"github.com/loukasprevyzis/kube-review/internal/rules"
 )
 
+func usage() {
+	fmt.Println("Usage: kube-review review [--fail-on HIGH|MEDIUM|LOW|NONE] [--output text|json] <file-or-directory>")
+}
+
 func main() {
 
-	if len(os.Args) < 3 {
-		fmt.Println("Usage: kube-review review <file-or-directory>")
+	if len(os.Args) < 2 {
+		usage()
 		os.Exit(1)
 	}
 
@@ -23,57 +28,143 @@ func main() {
 		os.Exit(1)
 	}
 
-	path := os.Args[2]
+	failOn := rules.High
+	outputFormat := "text"
+	var positional []string
+
+	args := os.Args[2:]
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+
+		switch {
+		case arg == "--fail-on":
+			i++
+			if i >= len(args) {
+				fmt.Fprintln(os.Stderr, "Error: --fail-on requires a value")
+				os.Exit(1)
+			}
+			failOn = args[i]
+
+		case strings.HasPrefix(arg, "--fail-on="):
+			failOn = strings.TrimPrefix(arg, "--fail-on=")
+
+		case arg == "--output":
+			i++
+			if i >= len(args) {
+				fmt.Fprintln(os.Stderr, "Error: --output requires a value")
+				os.Exit(1)
+			}
+			outputFormat = args[i]
+
+		case strings.HasPrefix(arg, "--output="):
+			outputFormat = strings.TrimPrefix(arg, "--output=")
+
+		default:
+			positional = append(positional, arg)
+		}
+	}
+
+	threshold := strings.ToUpper(failOn)
+	if !rules.ValidSeverityThreshold(threshold) {
+		fmt.Fprintf(os.Stderr, "Error: invalid --fail-on value %q (expected HIGH, MEDIUM, LOW, or NONE)\n", failOn)
+		os.Exit(1)
+	}
+
+	format := strings.ToLower(outputFormat)
+	if format != "text" && format != "json" {
+		fmt.Fprintf(os.Stderr, "Error: invalid --output value %q (expected text or json)\n", outputFormat)
+		os.Exit(1)
+	}
+
+	if len(positional) < 1 {
+		usage()
+		os.Exit(1)
+	}
+
+	path := positional[0]
+
+	var files []string
 
 	if parser.IsDirectory(path) {
 
-		files, err := parser.ListYAMLFiles(path)
+		found, err := parser.ListYAMLFiles(path)
 
 		if err != nil {
-			panic(err)
+			fmt.Fprintln(os.Stderr, "Error:", err)
+			os.Exit(1)
 		}
 
-		for _, file := range files {
+		files = found
 
-			deployment, err := parser.LoadDeployment(file)
+	} else {
+		files = []string{path}
+	}
 
-			if err != nil {
-				fmt.Printf("Failed to load %s: %v\n", file, err)
-				continue
-			}
+	var results []output.Result
+	hadFailure := false
+	shouldFail := false
 
-			fmt.Println()
-			fmt.Println("File:", file)
-			fmt.Println("Deployment:", deployment.Name)
+	for _, file := range files {
 
-			findings := rules.RunAll(deployment)
+		workloads, err := parser.LoadWorkloads(file)
 
-			if len(findings) == 0 {
-				fmt.Println("No findings")
-				continue
-			}
-
-			output.PrintFindings(findings)
+		if err != nil {
+			results = append(results, output.Result{File: file, Error: err.Error()})
+			hadFailure = true
+			continue
 		}
 
-		return
+		for _, w := range workloads {
+
+			findings := rules.RunAll(w)
+
+			results = append(results, output.Result{
+				File:     file,
+				Kind:     w.Kind,
+				Name:     w.Name,
+				Findings: findings,
+			})
+
+			for _, f := range findings {
+				if rules.MeetsThreshold(f.Severity, threshold) {
+					shouldFail = true
+				}
+			}
+		}
 	}
 
-	deployment, err := parser.LoadDeployment(path)
-
-	if err != nil {
-		panic(err)
+	if format == "json" {
+		if err := output.PrintJSON(os.Stdout, results); err != nil {
+			fmt.Fprintln(os.Stderr, "Error:", err)
+			os.Exit(1)
+		}
+	} else {
+		printText(results)
 	}
 
-	fmt.Println("Deployment:", deployment.Name)
-	fmt.Println()
-
-	findings := rules.RunAll(deployment)
-
-	if len(findings) == 0 {
-		fmt.Println("No findings")
-		return
+	if hadFailure || shouldFail {
+		os.Exit(1)
 	}
+}
 
-	output.PrintFindings(findings)
+func printText(results []output.Result) {
+	for _, r := range results {
+
+		fmt.Println()
+		fmt.Println("File:", r.File)
+
+		if r.Error != "" {
+			fmt.Println("Failed to load:", r.Error)
+			continue
+		}
+
+		fmt.Printf("%s: %s\n", r.Kind, r.Name)
+
+		if len(r.Findings) == 0 {
+			fmt.Println("No findings")
+			continue
+		}
+
+		output.PrintFindings(r.Findings)
+	}
 }

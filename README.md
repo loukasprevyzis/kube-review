@@ -30,6 +30,13 @@ Static Kubernetes manifest review tool written in Go.
 - Review an entire directory
 - Recursively scans subdirectories
 - Supports `.yaml` and `.yml` files
+- Supports multi-document YAML files (`---`-separated)
+
+### Workload Support
+
+- Deployment, StatefulSet, DaemonSet, ReplicaSet, Job, CronJob, and bare Pod
+- Non-workload kinds (Service, ConfigMap, ...) are skipped automatically
+- Security and cost rules also check init containers
 
 ---
 
@@ -89,6 +96,30 @@ kube-review review examples
 ```
 
 The tool will recursively discover Kubernetes manifests and review each file.
+
+### Flags
+
+| Flag | Values | Default | Description |
+|------|--------|---------|-------------|
+| `--fail-on` | `HIGH`, `MEDIUM`, `LOW`, `NONE` | `HIGH` | Minimum severity that causes a non-zero exit code. `NONE` never fails on findings (a file that fails to parse still exits non-zero). |
+| `--output` | `text`, `json` | `text` | Output format. `json` is intended for CI/tooling integration. |
+
+Flags may appear before or after the path:
+
+```bash
+kube-review review examples --fail-on MEDIUM --output json
+```
+
+### Exit codes
+
+- `0` — no findings at or above `--fail-on`, and every file parsed successfully
+- `1` — a finding met the `--fail-on` threshold, or a file failed to parse
+
+This makes `kube-review` usable as a CI gate, e.g. in a GitHub Actions step:
+
+```yaml
+- run: kube-review review manifests/ --fail-on HIGH
+```
 
 ---
 
@@ -166,11 +197,14 @@ kube-review/
 - [x] Cost rule engine
 - [x] Recursive directory scanning
 - [x] Unit tests
-- [ ] Multi-resource manifest support
+- [x] Multi-resource manifest support (multi-document YAML, multiple workload kinds)
+- [x] Configurable severity gate (`--fail-on`)
+- [x] JSON output
+- [x] CI pipeline (GitHub Actions)
 - [ ] Helm chart support
 - [ ] SARIF output
-- [ ] GitHub Action integration
-- [ ] Configurable policies
+- [ ] GitHub Action integration (composite action wrapping the binary)
+- [ ] Configurable rule policies (enable/disable individual rules, per-rule severity overrides)
 
 ---
 

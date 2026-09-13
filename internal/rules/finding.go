@@ -1,7 +1,7 @@
 package rules
 
 type Finding struct {
-	Category string
-	Severity string
-	Message  string
+	Category string `json:"category"`
+	Severity string `json:"severity"`
+	Message  string `json:"message"`
 }
