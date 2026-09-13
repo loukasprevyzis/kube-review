@@ -77,6 +77,23 @@ func splitYAMLDocuments(data []byte) ([][]byte, error) {
 }
 
 func parseWorkload(doc []byte) (*workload.Workload, error) {
+
+	// A directory scan runs into plenty of non-Kubernetes YAML: docker-compose
+	// files, kustomizations, CI configs, or documents that aren't even an
+	// object (a bare list or scalar). Object-shaped YAML with an unknown
+	// `kind` already falls through the switch below and is skipped, but a
+	// non-object document can't be unmarshaled into TypeMeta at all - check
+	// for that up front and skip it too, rather than surfacing it as a load
+	// failure. A genuine YAML syntax error is still reported, since that
+	// could be a real mistake in an actual manifest.
+	var generic interface{}
+	if err := yaml.Unmarshal(doc, &generic); err != nil {
+		return nil, err
+	}
+	if _, ok := generic.(map[string]interface{}); !ok {
+		return nil, nil
+	}
+
 	var meta metav1.TypeMeta
 
 	if err := yaml.Unmarshal(doc, &meta); err != nil {
