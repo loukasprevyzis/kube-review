@@ -10,8 +10,10 @@ import (
 	"github.com/loukasprevyzis/kube-review/internal/rules"
 )
 
+const defaultConfigFile = ".kube-review.yml"
+
 func usage() {
-	fmt.Println("Usage: kube-review review [--fail-on HIGH|MEDIUM|LOW|NONE] [--output text|json] <file-or-directory>")
+	fmt.Println("Usage: kube-review review [--fail-on HIGH|MEDIUM|LOW|NONE] [--output text|json] [--config path] <file-or-directory>")
 }
 
 func main() {
@@ -30,6 +32,7 @@ func main() {
 
 	failOn := rules.High
 	outputFormat := "text"
+	configPath := ""
 	var positional []string
 
 	args := os.Args[2:]
@@ -59,6 +62,17 @@ func main() {
 		case strings.HasPrefix(arg, "--output="):
 			outputFormat = strings.TrimPrefix(arg, "--output=")
 
+		case arg == "--config":
+			i++
+			if i >= len(args) {
+				fmt.Fprintln(os.Stderr, "Error: --config requires a value")
+				os.Exit(1)
+			}
+			configPath = args[i]
+
+		case strings.HasPrefix(arg, "--config="):
+			configPath = strings.TrimPrefix(arg, "--config=")
+
 		default:
 			positional = append(positional, arg)
 		}
@@ -82,6 +96,22 @@ func main() {
 	}
 
 	path := positional[0]
+
+	if configPath == "" {
+		if _, err := os.Stat(defaultConfigFile); err == nil {
+			configPath = defaultConfigFile
+		}
+	}
+
+	var policy rules.Policy
+	if configPath != "" {
+		p, err := rules.LoadPolicy(configPath)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "Error:", err)
+			os.Exit(1)
+		}
+		policy = p
+	}
 
 	var files []string
 
@@ -116,7 +146,7 @@ func main() {
 
 		for _, w := range workloads {
 
-			findings := rules.RunAll(w)
+			findings := rules.RunAll(w, policy)
 
 			results = append(results, output.Result{
 				File:     file,

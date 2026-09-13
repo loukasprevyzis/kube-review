@@ -2,18 +2,26 @@ package rules
 
 import "github.com/loukasprevyzis/kube-review/internal/workload"
 
-func RunAll(w *workload.Workload) []Finding {
+func RunAll(w *workload.Workload, policy Policy) []Finding {
 
 	var findings []Finding
 
-	findings = append(findings, CheckLatestTag(w)...)
-	findings = append(findings, CheckResourceLimits(w)...)
-	findings = append(findings, CheckResourceRequests(w)...)
-	findings = append(findings, CheckRunAsNonRoot(w)...)
-	findings = append(findings, CheckReadinessProbe(w)...)
-	findings = append(findings, CheckLivenessProbe(w)...)
-	findings = append(findings, CheckPrivilegedContainer(w)...)
-	findings = append(findings, CheckAllowPrivilegeEscalation(w)...)
+	for _, r := range registry {
+
+		if !policy.enabled(r.ID) {
+			continue
+		}
+
+		results := r.check(w)
+
+		if severity := policy.severityOverride(r.ID); severity != "" {
+			for i := range results {
+				results[i].Severity = severity
+			}
+		}
+
+		findings = append(findings, results...)
+	}
 
 	return findings
 }

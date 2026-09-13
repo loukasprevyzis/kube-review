@@ -103,6 +103,7 @@ The tool will recursively discover Kubernetes manifests and review each file.
 |------|--------|---------|-------------|
 | `--fail-on` | `HIGH`, `MEDIUM`, `LOW`, `NONE` | `HIGH` | Minimum severity that causes a non-zero exit code. `NONE` never fails on findings (a file that fails to parse still exits non-zero). |
 | `--output` | `text`, `json` | `text` | Output format. `json` is intended for CI/tooling integration. |
+| `--config` | path to a policy file | `.kube-review.yml` if present in the working directory | See [Policy Configuration](#policy-configuration). |
 
 Flags may appear before or after the path:
 
@@ -161,15 +162,34 @@ No findings
 
 ## Current Rules
 
-| Category | Rule | Severity |
-|-----------|--------|----------|
-| Security | Latest image tag | HIGH |
-| Security | Missing runAsNonRoot | HIGH |
-| Security | Missing allowPrivilegeEscalation=false | HIGH |
-| Reliability | Missing readiness probe | MEDIUM |
-| Reliability | Missing liveness probe | MEDIUM |
-| Cost | Missing resource requests | MEDIUM |
-| Cost | Missing resource limits | MEDIUM |
+| Category | Rule | ID | Default Severity |
+|-----------|--------|----|----|
+| Security | Latest image tag | `latest-tag` | HIGH |
+| Security | Missing runAsNonRoot | `run-as-non-root` | HIGH |
+| Security | Missing allowPrivilegeEscalation=false | `allow-privilege-escalation` | HIGH |
+| Security | Privileged container | `privileged-container` | HIGH |
+| Reliability | Missing readiness probe | `readiness-probe` | MEDIUM |
+| Reliability | Missing liveness probe | `liveness-probe` | MEDIUM |
+| Cost | Missing resource requests | `resource-requests` | MEDIUM |
+| Cost | Missing resource limits | `resource-limits` | MEDIUM |
+
+Security and cost rules also check init containers. Reliability probe rules only apply to regular containers, since the kubelet ignores probes on init containers.
+
+---
+
+## Policy Configuration
+
+Drop a `.kube-review.yml` in the directory you run `kube-review` from (or pass `--config path/to/file.yml`) to disable individual rules or override their severity:
+
+```yaml
+rules:
+  readiness-probe:
+    enabled: false        # don't require readiness probes on this repo
+  latest-tag:
+    severity: MEDIUM      # downgrade from the default HIGH
+```
+
+An unknown rule ID or an invalid severity value is a hard error, not a silent no-op — a typo here would otherwise disable a security check without warning.
 
 ---
 
@@ -201,10 +221,10 @@ kube-review/
 - [x] Configurable severity gate (`--fail-on`)
 - [x] JSON output
 - [x] CI pipeline (GitHub Actions)
+- [x] Configurable rule policies (enable/disable individual rules, per-rule severity overrides)
 - [ ] Helm chart support
 - [ ] SARIF output
 - [ ] GitHub Action integration (composite action wrapping the binary)
-- [ ] Configurable rule policies (enable/disable individual rules, per-rule severity overrides)
 
 ---
 
