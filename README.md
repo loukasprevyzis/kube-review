@@ -102,7 +102,7 @@ The tool will recursively discover Kubernetes manifests and review each file.
 | Flag | Values | Default | Description |
 |------|--------|---------|-------------|
 | `--fail-on` | `HIGH`, `MEDIUM`, `LOW`, `NONE` | `HIGH` | Minimum severity that causes a non-zero exit code. `NONE` never fails on findings (a file that fails to parse still exits non-zero). |
-| `--output` | `text`, `json` | `text` | Output format. `json` is intended for CI/tooling integration. |
+| `--output` | `text`, `json`, `sarif` | `text` | Output format. `json` is for CI/tooling integration; `sarif` produces a SARIF 2.1.0 report for GitHub code scanning and similar dashboards. |
 | `--config` | path to a policy file | `.kube-review.yml` if present in the working directory | See [Policy Configuration](#policy-configuration). |
 
 Flags may appear before or after the path:
@@ -121,6 +121,20 @@ This makes `kube-review` usable as a CI gate, e.g. in a GitHub Actions step:
 ```yaml
 - run: kube-review review manifests/ --fail-on HIGH
 ```
+
+### GitHub code scanning (SARIF)
+
+On repos with GitHub Advanced Security / code scanning enabled, upload findings as PR annotations:
+
+```yaml
+- run: kube-review review manifests/ --fail-on NONE --output sarif > kube-review.sarif
+
+- uses: github/codeql-action/upload-sarif@v3
+  with:
+    sarif_file: kube-review.sarif
+```
+
+Use `--fail-on NONE` when generating the SARIF report so the step doesn't exit non-zero before the upload step runs — let code scanning surface the findings instead of failing the build here.
 
 ---
 
@@ -222,8 +236,8 @@ kube-review/
 - [x] JSON output
 - [x] CI pipeline (GitHub Actions)
 - [x] Configurable rule policies (enable/disable individual rules, per-rule severity overrides)
+- [x] SARIF output
 - [ ] Helm chart support
-- [ ] SARIF output
 - [ ] GitHub Action integration (composite action wrapping the binary)
 
 ---

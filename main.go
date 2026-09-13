@@ -13,7 +13,7 @@ import (
 const defaultConfigFile = ".kube-review.yml"
 
 func usage() {
-	fmt.Println("Usage: kube-review review [--fail-on HIGH|MEDIUM|LOW|NONE] [--output text|json] [--config path] <file-or-directory>")
+	fmt.Println("Usage: kube-review review [--fail-on HIGH|MEDIUM|LOW|NONE] [--output text|json|sarif] [--config path] <file-or-directory>")
 }
 
 func main() {
@@ -85,8 +85,8 @@ func main() {
 	}
 
 	format := strings.ToLower(outputFormat)
-	if format != "text" && format != "json" {
-		fmt.Fprintf(os.Stderr, "Error: invalid --output value %q (expected text or json)\n", outputFormat)
+	if format != "text" && format != "json" && format != "sarif" {
+		fmt.Fprintf(os.Stderr, "Error: invalid --output value %q (expected text, json, or sarif)\n", outputFormat)
 		os.Exit(1)
 	}
 
@@ -163,12 +163,18 @@ func main() {
 		}
 	}
 
-	if format == "json" {
+	switch format {
+	case "json":
 		if err := output.PrintJSON(os.Stdout, results); err != nil {
 			fmt.Fprintln(os.Stderr, "Error:", err)
 			os.Exit(1)
 		}
-	} else {
+	case "sarif":
+		if err := output.PrintSARIF(os.Stdout, results); err != nil {
+			fmt.Fprintln(os.Stderr, "Error:", err)
+			os.Exit(1)
+		}
+	default:
 		printText(results)
 	}
 

@@ -14,8 +14,9 @@ func RunAll(w *workload.Workload, policy Policy) []Finding {
 
 		results := r.check(w)
 
-		if severity := policy.severityOverride(r.ID); severity != "" {
-			for i := range results {
+		for i := range results {
+			results[i].RuleID = r.ID
+			if severity := policy.severityOverride(r.ID); severity != "" {
 				results[i].Severity = severity
 			}
 		}

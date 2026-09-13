@@ -27,3 +27,11 @@ jobs:
 
       - name: kube-review dogfood
         run: go run . review examples --fail-on NONE --output json
+
+      - name: generate SARIF report
+        run: go run . review examples --fail-on NONE --output sarif > kube-review.sarif
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: kube-review-sarif
+          path: kube-review.sarif
